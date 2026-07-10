@@ -1,22 +1,41 @@
-import ytdlp from 'youtube-dl-exec';
 import ffmpegPath from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { dirname, delimiter, join } from 'node:path';
-import {TrackMeta} from "@/src/types/track";
+import { homedir } from 'node:os';
+import { TrackMeta } from '@/src/types/track';
+import { app } from 'electron';
 export type Format = 'mp3';
+export type Logger = (line: string) => void;
+import { ProcessError, StopError, SkipTrack } from '@/src/types/error';
 
-const YTDLP_BIN = (
-    ytdlp as unknown as { constants: { YOUTUBE_DL_PATH: string } }
-).constants.YOUTUBE_DL_PATH;
+const YTDLP_BIN = app.isPackaged
+    ? join(process.resourcesPath, 'bin', 'yt-dlp')
+    : join(process.cwd(), 'node_modules/youtube-dl-exec/bin/yt-dlp');
+
+export function findDeno(): string | null {
+    const candidates = [
+        '/opt/homebrew/bin/deno',                    // Apple Silicon Homebrew
+        '/usr/local/bin/deno',                       // Intel Homebrew
+        join(homedir(), '.deno', 'bin', 'deno'),     // curl installer
+        join(homedir(), '.deno', 'bin', 'deno.exe'), // Windows (if ever)
+    ];
+    for (const p of candidates) if (existsSync(p)) return p;
+    return null;
+}
+
+const extraBinDirs = [dirname(ffmpegPath), dirname(ffprobe.path)];
+const denoPath = findDeno();
+if (denoPath) extraBinDirs.push(dirname(denoPath));
 
 const childEnv: NodeJS.ProcessEnv = {
     ...process.env,
-    PATH: [dirname(ffmpegPath), dirname(ffprobe.path), process.env.PATH ?? ''].join(
-        delimiter,
-    ),
+    PATH: [...extraBinDirs, process.env.PATH ?? ''].join(delimiter),
 };
+
+const COOKIES_FROM_BROWSER = '';
+const COOKIES_FILE = '';
 
 export function safeName(input: string): string {
     const cleaned = input
@@ -27,32 +46,26 @@ export function safeName(input: string): string {
     return cleaned || 'Unknown';
 }
 
-class ProcessError extends Error {
-    constructor(message: string, readonly stderr: string) {
-        super(message);
-    }
-}
+function spawnP(bin: string, args: string[], log?: Logger, signal?: AbortSignal): Promise<void> {
+    const out = log ?? ((s: string) => console.log(s));
 
-function spawnP(bin: string, args: string[]): Promise<void> {
     return new Promise((done, reject) => {
-        const child = spawn(bin, args, { shell: false, env: childEnv });
+        const child = spawn(bin, args, { shell: false, env: childEnv, signal });
         let stderrText = '';
-        child.stdout?.on('data', (d: Buffer) => process.stdout.write(d));
-        child.stderr?.on('data', (d: Buffer) => {
-            stderrText += d.toString();
-            process.stderr.write(d);
-        });
+        const forward = (buf: Buffer) => {
+            for (const line of buf.toString().replace(/\r/g, '\n').split('\n')) {
+                if (line.trim()) out(line.trimEnd());
+            }
+        };
+        child.stdout?.on('data', forward);
+        child.stderr?.on('data', (d: Buffer) => { stderrText += d.toString(); forward(d); });
         child.on('error', reject);
         child.on('close', (code) =>
-            code === 0
-                ? done()
-                : reject(new ProcessError(`${bin} exited with code ${code}`, stderrText)),
+
+            code === 0 ? done() : reject(new ProcessError(`${bin} exited with code ${code}`, stderrText)),
         );
     });
 }
-
-const COOKIES_FROM_BROWSER = '';
-const COOKIES_FILE = '';
 
 function cookieArgs(): string[] {
     if (COOKIES_FILE) return ['--cookies', COOKIES_FILE];
@@ -79,37 +92,42 @@ function permanentReason(err: unknown): string | null {
     return null;
 }
 
-class SkipTrack extends Error {
-    constructor(readonly reason: string) {
-        super(reason);
-    }
-}
-
 const RETRY_CAP_MS = 30_000;
 
-async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (signal?.aborted) return reject(new StopError());
+        const t = setTimeout(() => { cleanup(); resolve(); }, ms);
+        const onAbort = () => { cleanup(); reject(new StopError()); };
+        const cleanup = () => { clearTimeout(t); signal?.removeEventListener('abort', onAbort); };
+        signal?.addEventListener('abort', onAbort, { once: true });
+    });
+}
+
+async function withRetry<T>(
+    fn: () => Promise<T>,
+    label: string,
+    log?: Logger,
+    signal?: AbortSignal,
+): Promise<T> {
+    const out = log ?? ((s: string) => console.log(s));
     for (let attempt = 1; ; attempt += 1) {
+        if (signal?.aborted) throw new StopError();
         try {
             return await fn();
         } catch (err) {
+            if (signal?.aborted || err instanceof StopError) throw new StopError();
             const reason = permanentReason(err);
             if (reason) throw new SkipTrack(reason);
-
             const waitMs = Math.min(1500 * attempt, RETRY_CAP_MS);
-            console.log("\n---------------------------------------------------------------------------------------------------");
-            console.log(
-                `\n[RETRY] (╥﹏╥) attempt ${attempt} failed, retrying in ${waitMs / 1000}s...`,
-            );
-            await new Promise((r) => setTimeout(r, waitMs));
+            out('---------------------------------------------------------------------------------------------------');
+            out(`[RETRY] (╥﹏╥) attempt ${attempt} failed. Retrying in ${waitMs / 1000}s...`);
+            await sleep(waitMs, signal);
         }
     }
 }
 
-async function writeMetadata(
-    file: string,
-    format: Format,
-    meta: TrackMeta,
-): Promise<void> {
+async function writeMetadata(file: string, format: Format, meta: TrackMeta, log?: Logger): Promise<void> {
     if (!existsSync(file)) return;
     const tmp = file.replace(new RegExp(`\\.${format}$`), `.tagging.${format}`);
     await spawnP(ffmpegPath, [
@@ -119,7 +137,7 @@ async function writeMetadata(
         '-metadata', `artist=${meta.artists.join(', ')}`,
         '-metadata', `album=${meta.album}`,
         '-y', tmp,
-    ]);
+    ], log);
     unlinkSync(file);
     renameSync(tmp, file);
 }
@@ -134,36 +152,40 @@ export async function downloadTrack(
     meta: TrackMeta,
     format: Format,
     baseDir: string,
+    log?: Logger,
+    signal?: AbortSignal,
 ): Promise<string> {
+    const out = log ?? ((s: string) => console.log(s));
     const dir = targetDir(baseDir, meta);
     const name = safeName(meta.title);
     const finalPath = join(dir, `${name}.${format}`);
 
-    console.log("\n---------------------------------------------------------------------------------------------------");
+    out('---------------------------------------------------------------------------------------------------');
 
     if (existsSync(finalPath)) {
-        console.log(`\n[SKIPPING DUPLICATES] ᕙ( ᗒᗣᗕ )ᕗ ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
+        out(`[SKIPPING DUPLICATES] ᕙ( ᗒᗣᗕ )ᕗ ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
         return finalPath;
     }
 
     mkdirSync(dir, { recursive: true });
 
     const query = `${meta.artists.join(' ')} ${meta.title}`;
-    console.log(`\n[DOWNLOADING] ♡⸜(˶˃ ᵕ ˂˶)⸝♡ ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
+    out(`[DOWNLOADING] ♡⸜(˶˃ ᵕ ˂˶)⸝♡ ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
     try {
         await withRetry(
-            () => spawnP(YTDLP_BIN, ytArgs(query, join(dir, `${name}.%(ext)s`))),
+            () => spawnP(YTDLP_BIN, ytArgs(query, join(dir, `${name}.%(ext)s`)), log, signal),
+            'YouTube 403/network',
+            log,
+            signal,
         );
     } catch (err) {
         if (err instanceof SkipTrack) {
-            console.log(
-                `\n[SKIPPING ${err.reason}] (ノಠ益ಠ)ノ彡┻━┻ ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`,
-            );
+            out(`[SKIPPING ${err.reason}] (ノಠ益ಠ)ノ彡┻━┻ ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
             return finalPath;
         }
         throw err;
     }
 
-    await writeMetadata(finalPath, format, meta);
+    await writeMetadata(finalPath, format, meta, log);
     return finalPath;
 }

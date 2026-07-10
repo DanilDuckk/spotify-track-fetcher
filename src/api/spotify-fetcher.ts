@@ -1,178 +1,113 @@
-import 'dotenv/config';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { exec } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import {PlaylistEntry, PlaylistMeta} from "@/src/types/playlist";
-import { ItemsPage } from "@/src/types/track";
+import { SpotifyConfig } from '@/src/types/config';
+import { ItemsPage } from '@/src/types/track';
+import { PlaylistMeta, PlaylistEntry } from '@/src/types/playlist';
 
-const TOKEN_FILE = join(process.cwd(), '.spotify-cache.json');
-
-function requireEnv(name: string): string {
-    const value = process.env[name];
-    if (!value) throw new Error(`Env variable ${name} is not set.`);
-    return value;
-}
-
-const CLIENT_ID = requireEnv('CLIENT_ID');
-const CLIENT_SECRET = requireEnv('CLIENT_SECRET');
-const PLAYLIST_ID = requireEnv('PLAYLIST_ID');
-const REDIRECT_URI = process.env.REDIRECT_URI ?? 'http://127.0.0.1:8888/callback';
-
-const SCOPE = 'playlist-read-private';
 const AUTH_URL = 'https://accounts.spotify.com/authorize';
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const API_BASE = 'https://api.spotify.com/v1';
+const SCOPE = 'playlist-read-private';
 
-function getAuthCode(): Promise<string> {
+type Logger = (line: string) => void;
+
+export function createSpotify(cfg: SpotifyConfig, log: Logger = console.log) {
+  const redirectUri = cfg.redirectUri ?? 'http://127.0.0.1:8888/callback';
+  const tokenFile = join(cfg.cacheDir, '.spotify-cache.json');
+
+  function loadRefreshToken(): string | null {
+    try {
+      if (!existsSync(tokenFile)) return null;
+      const data = JSON.parse(readFileSync(tokenFile, 'utf8')) as { refresh_token?: string };
+      return data.refresh_token ?? null;
+    } catch { return null; }
+  }
+  function saveRefreshToken(token: string): void {
+    writeFileSync(tokenFile, JSON.stringify({ refresh_token: token }, null, 2));
+  }
+
+  function getAuthCode(): Promise<string> {
     const state = crypto.randomBytes(16).toString('hex');
     const params = new URLSearchParams({
-        client_id: CLIENT_ID,
-        response_type: 'code',
-        redirect_uri: REDIRECT_URI,
-        scope: SCOPE,
-        state,
+      client_id: cfg.clientId, response_type: 'code', redirect_uri: redirectUri, scope: SCOPE, state,
     });
     const authUrl = `${AUTH_URL}?${params.toString()}`;
-    const port = Number(new URL(REDIRECT_URI).port) || 8888;
-
+    const port = Number(new URL(redirectUri).port) || 8888;
     return new Promise<string>((resolve, reject) => {
-        const server = http.createServer((req, res) => {
-            const url = new URL(req.url ?? '', `http://127.0.0.1:${port}`);
-            const code = url.searchParams.get('code');
-            const err = url.searchParams.get('error');
-            if (!code && !err) {
-                res.writeHead(204);
-                res.end();
-                return;
-            }
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end('Authorization complete. You can close this window.');
-            server.close();
-            if (err) reject(new Error(`Authorization rejected: ${err}`));
-            else if (url.searchParams.get('state') !== state)
-                reject(new Error('State does not match. Possible CSRF attack.'));
-            else resolve(code as string);
-        });
-        server.listen(port, '127.0.0.1', () => {
-            console.log('Opening browser for authorization...');
-            openBrowser(authUrl);
-        });
+      const server = http.createServer((req, res) => {
+        const url = new URL(req.url ?? '', `http://127.0.0.1:${port}`);
+        const code = url.searchParams.get('code');
+        const err = url.searchParams.get('error');
+        if (!code && !err) { res.writeHead(204); res.end(); return; }
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end('Done! You can close this tab.');
+        server.close();
+        if (err) reject(new Error(`Authorization denied: ${err}`));
+        else if (url.searchParams.get('state') !== state) reject(new Error('State mismatch — possible CSRF.'));
+        else resolve(code as string);
+      });
+      server.listen(port, '127.0.0.1', () => {
+        log('Opening browser for authorization...');
+        const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start ""' : 'xdg-open';
+        exec(`${cmd} "${authUrl}"`, (e) => { if (e) log(`Open manually: ${authUrl}`); });
+      });
     });
-}
+  }
 
-function openBrowser(url: string): void {
-    const cmd =
-        process.platform === 'darwin'
-            ? 'open'
-            : process.platform === 'win32'
-                ? 'start ""'
-                : 'xdg-open';
-    exec(`${cmd} "${url}"`, (error) => {
-        if (error) console.log(`Open manually:\n${url}`);
-    });
-}
-
-interface TokenResponse {
-    access_token: string;
-    refresh_token?: string;
-}
-
-function loadRefreshToken(): string | null {
-    try {
-        if (!existsSync(TOKEN_FILE)) return null;
-        const data = JSON.parse(readFileSync(TOKEN_FILE, 'utf8')) as {
-            refresh_token?: string;
-        };
-        return data.refresh_token ?? null;
-    } catch {
-        return null;
-    }
-}
-
-function saveRefreshToken(token: string): void {
-    writeFileSync(TOKEN_FILE, JSON.stringify({ refresh_token: token }, null, 2));
-}
-
-async function tokenRequest(body: URLSearchParams): Promise<TokenResponse> {
-    const basic = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
+  async function tokenRequest(body: URLSearchParams) {
+    const basic = Buffer.from(`${cfg.clientId}:${cfg.clientSecret}`).toString('base64');
     const resp = await fetch(TOKEN_URL, {
-        method: 'POST',
-        headers: {
-            Authorization: `Basic ${basic}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body,
+      method: 'POST',
+      headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
     });
     if (!resp.ok) throw new Error(`Token error ${resp.status}: ${await resp.text()}`);
-    return (await resp.json()) as TokenResponse;
-}
+    return (await resp.json()) as { access_token: string; refresh_token?: string };
+  }
 
-async function authorize(): Promise<string> {
+  async function authorize(): Promise<string> {
     const cached = loadRefreshToken();
-
     if (cached) {
-        try {
-            const data = await tokenRequest(
-                new URLSearchParams({ grant_type: 'refresh_token', refresh_token: cached }),
-            );
-            if (data.refresh_token) saveRefreshToken(data.refresh_token);
-            console.log('Auth from cached token.');
-            return data.access_token;
-        } catch {
-            console.log('Cached token is invalid, reauthorization needed.');
-        }
+      try {
+        const data = await tokenRequest(new URLSearchParams({ grant_type: 'refresh_token', refresh_token: cached }));
+        if (data.refresh_token) saveRefreshToken(data.refresh_token);
+        log('[INFO] Authorized from cache.');
+        return data.access_token;
+      } catch { log('Cached token invalid, re-authorization required.'); }
     }
-
     const code = await getAuthCode();
-    const data = await tokenRequest(
-        new URLSearchParams({
-            grant_type: 'authorization_code',
-            code,
-            redirect_uri: REDIRECT_URI,
-        }),
-    );
+    const data = await tokenRequest(new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri }));
     if (data.refresh_token) saveRefreshToken(data.refresh_token);
     return data.access_token;
-}
+  }
 
-async function fetchPlaylist(
-    token: string,
-): Promise<{ info: PlaylistMeta; items: PlaylistEntry[] }> {
+  async function fetchPlaylist(token: string): Promise<{ info: PlaylistMeta; items: PlaylistEntry[] }> {
     const headers = { Authorization: `Bearer ${token}` };
-
     const metaFields = encodeURIComponent('name,owner(display_name),items(total)');
-    const metaResp = await fetch(
-        `${API_BASE}/playlists/${PLAYLIST_ID}?fields=${metaFields}`,
-        { headers },
-    );
-    if (!metaResp.ok)
-        throw new Error(`Playlist error ${metaResp.status}: ${await metaResp.text()}`);
+    const metaResp = await fetch(`${API_BASE}/playlists/${cfg.playlistId}?fields=${metaFields}`, { headers });
+    if (!metaResp.ok) throw new Error(`Playlist error ${metaResp.status}: ${await metaResp.text()}`);
     const info = (await metaResp.json()) as PlaylistMeta;
 
     const items: PlaylistEntry[] = [];
-    const itemFields = encodeURIComponent(
-        'items(item(name,artists(name),album(name,release_date,images),external_urls(spotify))),next',
-    );
-    let url: string | null =
-        `${API_BASE}/playlists/${PLAYLIST_ID}/items?limit=100&fields=${itemFields}`;
-
+    const itemFields = encodeURIComponent('items(item(name,artists(name),album(name,release_date,images),external_urls(spotify))),next');
+    let url: string | null = `${API_BASE}/playlists/${cfg.playlistId}/items?limit=100&fields=${itemFields}`;
     while (url) {
-        const resp: Response = await fetch(url, { headers });
-        if (!resp.ok)
-            throw new Error(`Items error ${resp.status}: ${await resp.text()}`);
-        const page = (await resp.json()) as ItemsPage;
-        items.push(...page.items);
-        url = page.next;
+      const resp: Response = await fetch(url, { headers });
+      if (!resp.ok) throw new Error(`Items error ${resp.status}: ${await resp.text()}`);
+      const page = (await resp.json()) as ItemsPage;
+      items.push(...page.items);
+      url = page.next;
     }
     return { info, items };
-}
+  }
 
-export async function getPlaylistTracks(): Promise<{
-    info: PlaylistMeta;
-    items: PlaylistEntry[];
-}> {
-    const token = await authorize();
-    return fetchPlaylist(token);
+  return {
+    async getPlaylistTracks() {
+      const token = await authorize();
+      return fetchPlaylist(token);
+    },
+  };
 }
