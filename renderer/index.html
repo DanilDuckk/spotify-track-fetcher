@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>Spotube</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 24px;
+        background: #121212;
+        color: #eee;
+      }
+      h1 { font-size: 20px; margin: 0 0 16px; }
+      label { display: block; font-size: 12px; margin: 12px 0 4px; color: #aaa; }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px;
+        border: 1px solid #333;
+        border-radius: 6px;
+        background: #1e1e1e;
+        color: #eee;
+      }
+      button {
+        margin-top: 16px;
+        padding: 10px 20px;
+        border: 0;
+        border-radius: 6px;
+        background: #1db954;
+        color: #000;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.5; cursor: default; }
+      progress { width: 100%; height: 14px; margin-top: 16px; }
+      #log {
+        margin-top: 16px;
+        height: 220px;
+        overflow: auto;
+        background: #000;
+        border-radius: 6px;
+        padding: 10px;
+        font-family: monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Ehhhh</h1>
+
+    <label>PLAYLIST_ID</label>
+    <input id="playlistId" placeholder="e.g. 3pdwsDnzLp6Uks4dUutxp8" />
+
+    <label>SPOTIFY_CLIENT_ID</label>
+    <input id="clientId" />
+
+    <label>SPOTIFY_CLIENT_SECRET</label>
+    <input id="clientSecret" type="password" />
+
+    <button id="start">Start</button>
+    <progress id="bar" value="0" max="100"></progress>
+    <div id="log"></div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const logEl = $('log');
+
+      function addLog(line) {
+        logEl.textContent += line + '\n';
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      window.api.onLog(addLog);
+      window.api.onProgress((p) => {
+        $('bar').value = (p.done / p.total) * 100;
+      });
+
+      $('start').onclick = async () => {
+        $('start').disabled = true;
+        $('bar').value = 0;
+        logEl.textContent = '';
+        try {
+          await window.api.startDownload({
+            playlistId: $('playlistId').value.trim(),
+            clientId: $('clientId').value.trim(),
+            clientSecret: $('clientSecret').value.trim(),
+          });
+        } finally {
+          $('start').disabled = false;
+        }
+      };
+    </script>
+  </body>
+</html>
