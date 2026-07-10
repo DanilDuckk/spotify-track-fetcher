@@ -16,7 +16,7 @@ type Logger = (line: string) => void;
 
 export function createSpotify(cfg: SpotifyConfig, log: Logger = console.log) {
   const redirectUri = cfg.redirectUri ?? 'http://127.0.0.1:8888/callback';
-  const tokenFile = join(cfg.cacheDir, '.spotify-cache.json');
+  const tokenFile = join(cfg.cacheDir, '.cache.json');
 
   function loadRefreshToken(): string | null {
     try {

@@ -10,7 +10,7 @@ let controller: AbortController | null = null;
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 900,
-    height: 720,
+    height: 750,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -18,7 +18,7 @@ function createWindow(): void {
     },
   });
 
-  win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  win.loadFile('../index.html');
 
   ipcMain.handle('choose-folder', async () => {
     const result = await dialog.showOpenDialog(win, {
