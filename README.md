@@ -55,16 +55,6 @@ Playlist ID: `37i9dQZF1DXcBWIGoYBM5M`
 6. Choose a folder for the downloaded music
 7. Click Start
 
-## 5. Notes
-
-On macOS, Gatekeeper may block the app until you approve it manually. The easiest way is to open Finder, double-click the DMG, and confirm the prompt that appears (Box with the posiblity to move the app to the Applications folder).
-
-Run in the terminal with: `xattr -d com.apple.quarantine /path/to/SteamToPlayer.app`.
-
-Replace the path with the actual app location. For me it's `xattr -dr com.apple.quarantine "/Volumes/Spotify Track Fetcher 0.0.1-arm64/Spotify Track Fetcher.app`. 
-
-After that, open back the Box window and double click the application itseft (Do not transfer the app to the Applications folder).
-
 # Build from source
 
 If you want to build it yourself:
