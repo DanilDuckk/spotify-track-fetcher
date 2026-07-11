@@ -18,7 +18,7 @@ function createWindow(): void {
     },
   });
 
-  win.loadFile('../index.html');
+  win.loadFile(path.join(app.getAppPath(), 'index.html'));
 
   ipcMain.handle('choose-folder', async () => {
     const result = await dialog.showOpenDialog(win, {
