@@ -2,4 +2,3 @@ node_modules
 dist-electron
 .env
 .DS_Store
-.cache.json
