@@ -2,7 +2,7 @@ import ytdlp from 'youtube-dl-exec';
 import ffmpegPath from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { dirname, delimiter, join } from 'node:path';
 import { homedir } from 'node:os';
 import { TrackMeta } from '@/src/types/track';
@@ -14,12 +14,27 @@ import { isSpawnError } from '@/src/util/error'
 const YTDLP_NAME = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
 
 function resolveYtDlp(): string {
-    const dev = join(process.cwd(), 'node_modules', 'youtube-dl-exec', 'bin', YTDLP_NAME);
-    if (existsSync(dev)) return dev;
-    if (process.resourcesPath) {
-        const packaged = join(process.resourcesPath, 'bin', YTDLP_NAME);
-        if (existsSync(packaged)) return packaged;
+    const candidates = [
+        join(process.cwd(), 'node_modules', 'youtube-dl-exec', 'bin', YTDLP_NAME),
+        process.resourcesPath ? join(process.resourcesPath, 'bin', YTDLP_NAME) : '',
+        process.resourcesPath ? join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'youtube-dl-exec', 'bin', YTDLP_NAME) : '',
+        (ytdlp as unknown as { constants: { YOUTUBE_DL_PATH: string } }).constants.YOUTUBE_DL_PATH,
+    ];
+
+    for (const candidate of candidates) {
+        if (!candidate) continue;
+        if (existsSync(candidate)) {
+            if (process.platform !== 'win32') {
+                try {
+                    chmodSync(candidate, 0o755);
+                } catch {
+                    // Ignore chmod failures; the file can still be run if it already has execute permissions.
+                }
+            }
+            return candidate;
+        }
     }
+
     return (ytdlp as unknown as { constants: { YOUTUBE_DL_PATH: string } }).constants.YOUTUBE_DL_PATH;
 }
 
