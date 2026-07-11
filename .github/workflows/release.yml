@@ -64,15 +64,20 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
+          merge-multiple: true
+
+      - name: Show downloaded files
+        run: find release-artifacts -maxdepth 2 -type f | sort
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-artifacts/**/*.exe
-            release-artifacts/**/*.dmg
-            release-artifacts/**/*.AppImage
-            release-artifacts/**/*.yml
-            release-artifacts/**/*.blockmap
+            release-artifacts/*.exe
+            release-artifacts/*.dmg
+            release-artifacts/*.AppImage
+            release-artifacts/*.yml
+            release-artifacts/*.blockmap
           draft: false
           prerelease: false
+          fail_on_unmatched_files: false
