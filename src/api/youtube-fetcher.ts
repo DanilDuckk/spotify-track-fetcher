@@ -1,3 +1,4 @@
+import ytdlp from 'youtube-dl-exec';
 import ffmpegPath from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
 import { spawn } from 'node:child_process';
@@ -5,14 +6,24 @@ import { existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { dirname, delimiter, join } from 'node:path';
 import { homedir } from 'node:os';
 import { TrackMeta } from '@/src/types/track';
-import { app } from 'electron';
 export type Format = 'mp3';
 export type Logger = (line: string) => void;
 import { ProcessError, StopError, SkipTrack } from '@/src/types/error';
+import { isSpawnError } from '@/src/util/error'
 
-const YTDLP_BIN = app.isPackaged
-    ? join(process.resourcesPath, 'bin', 'yt-dlp')
-    : join(process.cwd(), 'node_modules/youtube-dl-exec/bin/yt-dlp');
+const YTDLP_NAME = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+
+function resolveYtDlp(): string {
+    const dev = join(process.cwd(), 'node_modules', 'youtube-dl-exec', 'bin', YTDLP_NAME);
+    if (existsSync(dev)) return dev;
+    if (process.resourcesPath) {
+        const packaged = join(process.resourcesPath, 'bin', YTDLP_NAME);
+        if (existsSync(packaged)) return packaged;
+    }
+    return (ytdlp as unknown as { constants: { YOUTUBE_DL_PATH: string } }).constants.YOUTUBE_DL_PATH;
+}
+
+const YTDLP_BIN = resolveYtDlp();
 
 export function findDeno(): string | null {
     const candidates = [
@@ -117,6 +128,7 @@ async function withRetry<T>(
             return await fn();
         } catch (err) {
             if (signal?.aborted || err instanceof StopError) throw new StopError();
+            if (isSpawnError(err)) throw err;
             const reason = permanentReason(err);
             if (reason) throw new SkipTrack(reason);
             const waitMs = Math.min(1500 * attempt, RETRY_CAP_MS);

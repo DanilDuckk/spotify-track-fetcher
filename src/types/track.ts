@@ -1,6 +1,6 @@
 import type { Artist } from '@/src/types/artist';
 import type { Album } from '@/src/types/album';
-import {PlaylistEntry} from "@/src/types/playlist";
+import { PlaylistEntry } from "@/src/types/playlist";
 
 export interface Track {
     name: string;
