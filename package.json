@@ -1,9 +1,9 @@
 {
   "name": "spotify-playlist-ts",
-  "version": "1.0.0",
+  "version": "0.1",
   "private": true,
   "type": "module",
-  "description": "",
+  "description": "Fetches Spotify playlists, retrieves track metadata, and downloads matching songs as MP3 files from Youtube. Downloaded music is automatically organized into a clean folder hierarchy: Artist -> Album -> Song.",
   "scripts": {
     "build:app": "esbuild src/main.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/main.cjs && esbuild src/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs",
     "app": "npm run build:app && electron dist-electron/main.cjs",
