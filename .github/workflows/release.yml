@@ -48,9 +48,6 @@ jobs:
           path: |
             dist/*.exe
             dist/*.dmg
-            dist/*.AppImage
-            dist/*.yml
-            dist/*.blockmap
 
   release:
     needs: build
@@ -75,9 +72,6 @@ jobs:
           files: |
             release-artifacts/*.exe
             release-artifacts/*.dmg
-            release-artifacts/*.AppImage
-            release-artifacts/*.yml
-            release-artifacts/*.blockmap
           draft: false
           prerelease: false
           fail_on_unmatched_files: false

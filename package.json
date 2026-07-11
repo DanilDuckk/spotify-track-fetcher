@@ -9,8 +9,7 @@
     "build:app": "esbuild src/main.ts --bundle --platform=node --format=cjs --external:electron --external:youtube-dl-exec --external:ffmpeg-static --external:ffprobe-static --outfile=dist-electron/main.cjs && esbuild src/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs",
     "app": "npm run build:app && electron dist-electron/main.cjs",
     "typecheck": "tsc --noEmit",
-    "dist": "electron-builder",
-    "icons:generate": "rm -rf build/icon.iconset build/icon.icns build/icon.png build/icon.ico && mkdir -p build && sips -z 1024 1024 public/icon.jpg --out build/icon.png && cp build/icon.png build/icon.ico && mkdir -p build/icon.iconset && for size in 16 32 64 128 256 512; do sips -z \"$size\" \"$size\" public/icon.jpg --out \"build/icon.iconset/icon_${size}x${size}.png\"; if [ \"$size\" -ge 16 ]; then sips -z \"$((size * 2))\" \"$((size * 2))\" public/icon.jpg --out \"build/icon.iconset/icon_${size}x${size}@2x.png\"; fi; done && iconutil -c icns build/icon.iconset -o build/icon.icns"
+    "dist": "electron-builder"
   },
   "build": {
     "appId": "com.spotifytrackfetcher.app",
@@ -40,19 +39,18 @@
         "dmg"
       ],
       "category": "public.app-category.music",
-      "icon": "build/icon.icns"
+      "icon": "public/icons/macos.icns"
     },
     "win": {
       "target": [
         "nsis"
       ],
-      "icon": "build/icon.ico"
+      "icon": "public/icons/win.ico"
     },
     "linux": {
       "target": [
         "AppImage"
-      ],
-      "icon": "build/icon.png"
+      ]
     }
   },
   "dependencies": {
