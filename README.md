@@ -6,7 +6,7 @@ A desktop application that allows you to download music from Spotify playlists t
 
 # How did it become a thing?
 
-There was a time when I caught myself sitting on the gym equipment, staring at my phone, scrolling through reels, and this shit disappointed me. I'm not ADHD, but this damn brick was sucking out my mind during my workouts. I decided to buy myself an MP3 player to stay focused (at least in the gym). When I tried to manually download my playlist, I caught myself crying like a damn fool. Then I remembered that I'm actually a programmer and I can automate this stuff. This is how the project was born. \o/
+There was a time when I caught myself sitting on the gym equipment, staring at my phone, scrolling through reels, and this shit disappointed me. I'm not ADHD, but this damn brick was sucking out my mind during my workouts. Not long ago I aquired an MP3 player to stay focused (at least in the gym). When I tried to manually download my playlist, I caught myself crying like a damn fool. Then I remembered that I'm actually a programmer and I can automate this stuff. This is how the project was born. \o/
 
 # Installation guide (Last tested in July 2026)
 
