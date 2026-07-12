@@ -112,9 +112,7 @@ export function buildYtDlpArgs(query: string, outputTemplate: string): string[] 
         '--audio-format', 'mp3',
         '--audio-quality', '0',
         '--ffmpeg-location',
-        ffmpegPath,
-        '--ffprobe-location',
-        ffprobe.path,
+        dirname(ffmpegPath),
     ];
 }
 
