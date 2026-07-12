@@ -2,9 +2,10 @@ import ytdlp from 'youtube-dl-exec';
 import ffmpegPath from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
 import { spawn } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { dirname, delimiter, join } from 'node:path';
 import { homedir } from 'node:os';
+import { app } from 'electron';
 import { TrackMeta } from '@/src/types/track';
 export type Format = 'mp3';
 export type Logger = (line: string) => void;
@@ -51,7 +52,47 @@ export function findDeno(): string | null {
     return null;
 }
 
-const extraBinDirs = [dirname(ffmpegPath), dirname(ffprobe.path)];
+function resolveExecutablePath(candidate: string): string {
+    if (existsSync(candidate)) return candidate;
+    if (process.platform === 'win32' && !candidate.toLowerCase().endsWith('.exe')) {
+        const withExe = `${candidate}.exe`;
+        if (existsSync(withExe)) return withExe;
+    }
+    return candidate;
+}
+
+const resolvedFfmpegPath = resolveExecutablePath(ffmpegPath);
+const resolvedFfprobePath = resolveExecutablePath(ffprobe.path);
+
+function resolveToolchainDir(): string {
+    const toolchainDir = join(app.getPath('userData'), 'toolchain-bin');
+
+    mkdirSync(toolchainDir, { recursive: true });
+
+    const ffmpegName = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+    const ffprobeName = process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe';
+    const ffmpegTarget = join(toolchainDir, ffmpegName);
+    const ffprobeTarget = join(toolchainDir, ffprobeName);
+
+    try {
+        copyFileSync(resolvedFfmpegPath, ffmpegTarget);
+        chmodSync(ffmpegTarget, 0o755);
+    } catch {
+        // Ignore copy failures; the app can still use the original path if the staging copy is unavailable.
+    }
+
+    try {
+        copyFileSync(resolvedFfprobePath, ffprobeTarget);
+        chmodSync(ffprobeTarget, 0o755);
+    } catch {
+        // Ignore copy failures; the app can still use the original path if the staging copy is unavailable.
+    }
+
+    return toolchainDir;
+}
+
+const toolchainDir = resolveToolchainDir();
+const extraBinDirs = [dirname(resolvedFfmpegPath), dirname(resolvedFfprobePath), toolchainDir];
 const denoPath = findDeno();
 if (denoPath) extraBinDirs.push(dirname(denoPath));
 
@@ -99,14 +140,21 @@ function cookieArgs(): string[] {
     return [];
 }
 
-function ytArgs(query: string, outputTemplate: string): string[] {
+export function buildYtDlpArgs(query: string, outputTemplate: string): string[] {
     const common = [
         `ytsearch1:${query}`,
         '--output', outputTemplate,
         '--no-playlist',
         ...cookieArgs(),
     ];
-    return [...common, '--extract-audio', '--audio-format', 'mp3', '--audio-quality', '0'];
+    return [
+        ...common,
+        '--extract-audio',
+        '--audio-format', 'mp3',
+        '--audio-quality', '0',
+        '--ffmpeg-location',
+        toolchainDir,
+    ];
 }
 
 function permanentReason(err: unknown): string | null {
@@ -157,7 +205,7 @@ async function withRetry<T>(
 async function writeMetadata(file: string, format: Format, meta: TrackMeta, log?: Logger): Promise<void> {
     if (!existsSync(file)) return;
     const tmp = file.replace(new RegExp(`\\.${format}$`), `.tagging.${format}`);
-    await spawnP(ffmpegPath, [
+    await spawnP(resolvedFfmpegPath, [
         '-i', file,
         '-c', 'copy',
         '-metadata', `title=${meta.title}`,
@@ -200,7 +248,7 @@ export async function downloadTrack(
     out(`[DOWNLOADING] ♡⸜(˶˃ ᵕ ˂˶)⸝♡ ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
     try {
         await withRetry(
-            () => spawnP(YTDLP_BIN, ytArgs(query, join(dir, `${name}.%(ext)s`)), log, signal),
+            () => spawnP(YTDLP_BIN, buildYtDlpArgs(query, join(dir, `${name}.%(ext)s`)), log, signal),
             'YouTube 403/network',
             log,
             signal,
