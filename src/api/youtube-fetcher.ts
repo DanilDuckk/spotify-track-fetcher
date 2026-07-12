@@ -205,7 +205,7 @@ async function withRetry<T>(
 async function writeMetadata(file: string, format: Format, meta: TrackMeta, log?: Logger): Promise<void> {
     if (!existsSync(file)) return;
     const tmp = file.replace(new RegExp(`\\.${format}$`), `.tagging.${format}`);
-    await spawnP(ffmpegPath, [
+    await spawnP(resolvedFfmpegPath, [
         '-i', file,
         '-c', 'copy',
         '-metadata', `title=${meta.title}`,
