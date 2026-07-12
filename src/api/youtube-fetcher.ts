@@ -99,14 +99,23 @@ function cookieArgs(): string[] {
     return [];
 }
 
-function ytArgs(query: string, outputTemplate: string): string[] {
+export function buildYtDlpArgs(query: string, outputTemplate: string): string[] {
     const common = [
         `ytsearch1:${query}`,
         '--output', outputTemplate,
         '--no-playlist',
         ...cookieArgs(),
     ];
-    return [...common, '--extract-audio', '--audio-format', 'mp3', '--audio-quality', '0'];
+    return [
+        ...common,
+        '--extract-audio',
+        '--audio-format', 'mp3',
+        '--audio-quality', '0',
+        '--ffmpeg-location',
+        ffmpegPath,
+        '--ffprobe-location',
+        ffprobe.path,
+    ];
 }
 
 function permanentReason(err: unknown): string | null {
@@ -200,7 +209,7 @@ export async function downloadTrack(
     out(`[DOWNLOADING] ♡⸜(˶˃ ᵕ ˂˶)⸝♡ ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
     try {
         await withRetry(
-            () => spawnP(YTDLP_BIN, ytArgs(query, join(dir, `${name}.%(ext)s`)), log, signal),
+            () => spawnP(YTDLP_BIN, buildYtDlpArgs(query, join(dir, `${name}.%(ext)s`)), log, signal),
             'YouTube 403/network',
             log,
             signal,
