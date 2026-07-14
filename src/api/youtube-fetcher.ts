@@ -3,7 +3,7 @@ import ffmpegPath from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
 import { spawn } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
-import { dirname, delimiter, join } from 'node:path';
+import { dirname, delimiter, join, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { app } from 'electron';
 import { TrackMeta } from '@/src/types/track';
@@ -53,6 +53,12 @@ export function findDeno(): string | null {
 }
 
 function resolveExecutablePath(candidate: string): string {
+    // Packaged app: binaries inside app.asar can neither be executed nor copied
+    // (spawn/copyFileSync throw ENOTDIR). Their real files live in app.asar.unpacked
+    // (requires asarUnpack in package.json).
+    if (candidate.includes(`app.asar${sep}`)) {
+        candidate = candidate.replace(`app.asar${sep}`, `app.asar.unpacked${sep}`);
+    }
     if (existsSync(candidate)) return candidate;
     if (process.platform === 'win32' && !candidate.toLowerCase().endsWith('.exe')) {
         const withExe = `${candidate}.exe`;
@@ -203,9 +209,10 @@ async function withRetry<T>(
 }
 
 async function writeMetadata(file: string, format: Format, meta: TrackMeta, log?: Logger): Promise<void> {
-    if (!existsSync(file)) return;
+    if (!existsSync(file)) { (log ?? console.log)(`[WARN] metadata skipped, file not found: ${file}`); return; }
+    const ffmpegBin = join(toolchainDir, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
     const tmp = file.replace(new RegExp(`\\.${format}$`), `.tagging.${format}`);
-    await spawnP(resolvedFfmpegPath, [
+    await spawnP(ffmpegBin, [
         '-i', file,
         '-c', 'copy',
         '-metadata', `title=${meta.title}`,
@@ -248,7 +255,7 @@ export async function downloadTrack(
     out(`[DOWNLOADING] ♡⸜(˶˃ ᵕ ˂˶)⸝♡ ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
     try {
         await withRetry(
-            () => spawnP(YTDLP_BIN, buildYtDlpArgs(query, join(dir, `${name}.%(ext)s`)), log, signal),
+            () => spawnP(YTDLP_BIN, buildYtDlpArgs(query, join(dir, name).replace(/%/g, '%%') + '.%(ext)s'), log, signal),
             'YouTube 403/network',
             log,
             signal,

@@ -18,7 +18,7 @@ function createWindow(): void {
     },
   });
 
-  win.loadFile(path.join(app.getAppPath(), 'index.html'));
+  win.loadFile(path.join(__dirname, '..', 'index.html'));
 
   ipcMain.handle('choose-folder', async () => {
     const result = await dialog.showOpenDialog(win, {
@@ -84,6 +84,7 @@ function createWindow(): void {
           artists: track.artists.map((a) => a.name),
           album: track.album.name,
         };
+        log('---------------------------------------------------------------------------------------------------');
         log(`[${done + 1}/${tracks.length}] ${meta.artists.join(', ')} - ${meta.title}`);
         try {
           await downloadTrack(meta, 'mp3', config.downloadDir, log, signal);

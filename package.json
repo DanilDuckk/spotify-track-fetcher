@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "main": "dist-electron/main.cjs",
-  "description": "Fetches Spotify playlists, retrieves track metadata, and downloads matching songs as MP3 files from Youtube. Downloaded music is automatically organized into a clean folder hierarchy: Artist -> Album -> Song.",
+  "description": "Fetches Spotify playlists and downloads matching songs as MP3 from YouTube.",
   "scripts": {
     "build:app": "esbuild src/main.ts --bundle --platform=node --format=cjs --external:electron --external:youtube-dl-exec --external:ffmpeg-static --external:ffprobe-static --outfile=dist-electron/main.cjs && esbuild src/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs",
     "app": "npm run build:app && electron dist-electron/main.cjs",
     "typecheck": "tsc --noEmit",
-    "dist": "electron-builder"
+    "dist": "npm run build:app && electron-builder"
   },
   "build": {
     "appId": "com.spotifytrackfetcher.app",
@@ -22,36 +22,18 @@
       "!**/*.ts",
       "!**/*.map"
     ],
-    "directories": {
-      "buildResources": "build"
-    },
-    "extraResources": [
-      {
-        "from": "node_modules/youtube-dl-exec/bin",
-        "to": "bin",
-        "filter": [
-          "yt-dlp*"
-        ]
-      }
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**",
+      "node_modules/ffprobe-static/**",
+      "node_modules/youtube-dl-exec/**"
     ],
-    "mac": {
-      "target": [
-        "dmg"
-      ],
-      "category": "public.app-category.music",
-      "icon": "public/icons/macos.icns"
-    },
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "public/icons/win.ico"
-    },
-    "linux": {
-      "target": [
-        "AppImage"
-      ]
-    }
+    "directories": { "buildResources": "build" },
+    "extraResources": [
+      { "from": "node_modules/youtube-dl-exec/bin", "to": "bin", "filter": ["yt-dlp*"] }
+    ],
+    "mac": { "target": ["dmg"], "category": "public.app-category.music", "icon": "public/icons/macos.icns" },
+    "win": { "target": ["nsis"], "icon": "public/icons/win.ico" },
+    "linux": { "target": ["AppImage"] }
   },
   "dependencies": {
     "dotenv": "^16.4.7",
@@ -65,10 +47,5 @@
     "electron-builder": "^26.0.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
-  },
-  "allowScripts": {
-    "ffmpeg-static@5.3.0": true,
-    "youtube-dl-exec@3.1.9": true,
-    "esbuild@0.28.1": true
   }
 }
