@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import { createSpotify } from '@/src/api/spotify-fetcher';
-import { downloadTrack, findDeno } from '@/src/api/youtube-fetcher';
+import { downloadTrack, YTDLP_BIN } from '@/src/api/youtube-fetcher';
 import { StopError } from '@/src/types/error';
 import { DownloadConfig } from '@/src/types/config';
 
@@ -9,8 +9,8 @@ let controller: AbortController | null = null;
 
 function createWindow(): void {
   const win = new BrowserWindow({
-    width: 900,
-    height: 750,
+    width: 800,
+    height: 500,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -19,6 +19,9 @@ function createWindow(): void {
   });
 
   win.loadFile(path.join(__dirname, '..', 'index.html'));
+    const log = (line: string) => win.webContents.send('log', line);
+    const progress = (done: number, total: number) =>
+      win.webContents.send('progress', { done, total });
 
   ipcMain.handle('choose-folder', async () => {
     const result = await dialog.showOpenDialog(win, {
@@ -27,19 +30,16 @@ function createWindow(): void {
     return result.canceled ? null : result.filePaths[0];
   });
 
-  // Stop button: abort the current run.
   ipcMain.handle('stop-download', () => {
     if (controller) {
       controller.abort();
-      win.webContents.send('log', 'Stopping... (finishing current step)');
+      log('[INFO] Stopping... (finishing current step)');
     }
     return { ok: true };
   });
 
   ipcMain.handle('start-download', async (_event, config: DownloadConfig) => {
-    const log = (line: string) => win.webContents.send('log', line);
-    const progress = (done: number, total: number) =>
-      win.webContents.send('progress', { done, total });
+
 
     if (!config.clientId || !config.clientSecret || !config.playlistId) {
       log('[ERROR] Please fill in Playlist ID, Client ID and Client Secret.');
@@ -53,8 +53,6 @@ function createWindow(): void {
     controller = new AbortController();
     const { signal } = controller;
 
-    const deno = findDeno();
-
     try {
       const spotify = createSpotify(
         {
@@ -67,6 +65,7 @@ function createWindow(): void {
       );
 
       log('[INFO] Fetching playlist from Spotify...');
+      log(`[INFO] yt-dlp binary: ${YTDLP_BIN}`);
       const { info, items } = await spotify.getPlaylistTracks();
       const tracks = items.filter((e) => e.item);
       log(`[INFO] Playlist "${info.name}" — ${tracks.length} tracks. Starting download...`);
@@ -84,14 +83,15 @@ function createWindow(): void {
           artists: track.artists.map((a) => a.name),
           album: track.album.name,
         };
-        log('---------------------------------------------------------------------------------------------------');
-        log(`[${done + 1}/${tracks.length}] ${meta.artists.join(', ')} - ${meta.title}`);
+        log('---------------------------------------------');
+        log(`[STATUS] ${done + 1}/${tracks.length}`);
         try {
           await downloadTrack(meta, 'mp3', config.downloadDir, log, signal);
           ok += 1;
+          log(`[INFO] SUCCESS`);
         } catch (err) {
           if (err instanceof StopError) {
-            log('Stopped by user.');
+            log('[INFO] Stopped by user.');
             break;
           }
           failed += 1;
@@ -102,12 +102,12 @@ function createWindow(): void {
       }
 
       if (!signal.aborted) {
-        log(`Done. Success: ${ok}, failed: ${failed}. Folder: ${config.downloadDir}`);
+        log(`[INFO] Done. Success: ${ok}, failed: ${failed}. Folder: ${config.downloadDir}`);
       }
       return { ok: true, stopped: signal.aborted };
     } catch (err) {
       if (err instanceof StopError) {
-        log('Stopped by user.');
+        log('[INFO] Stopped by user.');
         return { ok: false, stopped: true };
       }
       log(`[ERROR] ${err instanceof Error ? err.message : String(err)}`);

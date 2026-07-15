@@ -4,53 +4,50 @@ import ffprobe from 'ffprobe-static';
 import { spawn } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { dirname, delimiter, join, sep } from 'node:path';
-import { homedir } from 'node:os';
 import { app } from 'electron';
 import { TrackMeta } from '@/src/types/track';
 export type Format = 'mp3';
 export type Logger = (line: string) => void;
 import { ProcessError, StopError, SkipTrack } from '@/src/types/error';
 import { isSpawnError } from '@/src/util/error'
+import { VERBOSE_TOOL_LOGS, RETRY_CAP_MS } from '@/src/constants';
 
-const YTDLP_NAME = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+const YTDLP_NAMES: readonly string[] =
+    process.platform === 'win32'
+        ? ['yt-dlp.exe']
+        : process.platform === 'darwin'
+            ? ['yt-dlp_macos', 'yt-dlp']
+            : ['yt-dlp_linux', 'yt-dlp'];
 
 function resolveYtDlp(): string {
-    const candidates = [
-        join(process.cwd(), 'node_modules', 'youtube-dl-exec', 'bin', YTDLP_NAME),
-        process.resourcesPath ? join(process.resourcesPath, 'bin', YTDLP_NAME) : '',
-        process.resourcesPath ? join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'youtube-dl-exec', 'bin', YTDLP_NAME) : '',
-        (ytdlp as unknown as { constants: { YOUTUBE_DL_PATH: string } }).constants.YOUTUBE_DL_PATH,
-    ];
+    const dirs = [
+        join(process.cwd(), 'node_modules', 'youtube-dl-exec', 'bin'),
+        process.resourcesPath ? join(process.resourcesPath, 'bin') : '',
+        process.resourcesPath
+            ? join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'youtube-dl-exec', 'bin')
+            : '',
+    ].filter(Boolean);
 
-    for (const candidate of candidates) {
-        if (!candidate) continue;
-        if (existsSync(candidate)) {
-            if (process.platform !== 'win32') {
-                try {
-                    chmodSync(candidate, 0o755);
-                } catch {
-                    // Ignore chmod failures; the file can still be run if it already has execute permissions.
+    for (const dir of dirs) {
+        for (const name of YTDLP_NAMES) {
+            const candidate = join(dir, name);
+            if (existsSync(candidate)) {
+                if (process.platform !== 'win32') {
+                    try {
+                        chmodSync(candidate, 0o755);
+                    } catch {
+                        // Ignore chmod failures; the file can still be run if it already has execute permissions.
+                    }
                 }
+                return candidate;
             }
-            return candidate;
         }
     }
 
     return (ytdlp as unknown as { constants: { YOUTUBE_DL_PATH: string } }).constants.YOUTUBE_DL_PATH;
 }
 
-const YTDLP_BIN = resolveYtDlp();
-
-export function findDeno(): string | null {
-    const candidates = [
-        '/opt/homebrew/bin/deno',                    // Apple Silicon Homebrew
-        '/usr/local/bin/deno',                       // Intel Homebrew
-        join(homedir(), '.deno', 'bin', 'deno'),     // curl installer
-        join(homedir(), '.deno', 'bin', 'deno.exe'), // Windows (if ever)
-    ];
-    for (const p of candidates) if (existsSync(p)) return p;
-    return null;
-}
+export const YTDLP_BIN = resolveYtDlp();
 
 function resolveExecutablePath(candidate: string): string {
     // Packaged app: binaries inside app.asar can neither be executed nor copied
@@ -99,8 +96,6 @@ function resolveToolchainDir(): string {
 
 const toolchainDir = resolveToolchainDir();
 const extraBinDirs = [dirname(resolvedFfmpegPath), dirname(resolvedFfprobePath), toolchainDir];
-const denoPath = findDeno();
-if (denoPath) extraBinDirs.push(dirname(denoPath));
 
 const childEnv: NodeJS.ProcessEnv = {
     ...process.env,
@@ -119,6 +114,18 @@ export function safeName(input: string): string {
     return cleaned || 'Unknown';
 }
 
+function shouldLog(line: string): boolean {
+    if (VERBOSE_TOOL_LOGS) return true;
+    return /\b(ERROR|WARNING)\b/.test(line);
+}
+
+function formatToolLine(line: string): string {
+    return line.replace(
+        /^(ERROR|WARNING):\s*(.?)/,
+        (_m, tag: string, first: string) => `[${tag}] ${first.toUpperCase()}`,
+    );
+}
+
 function spawnP(bin: string, args: string[], log?: Logger, signal?: AbortSignal): Promise<void> {
     const out = log ?? ((s: string) => console.log(s));
 
@@ -127,7 +134,7 @@ function spawnP(bin: string, args: string[], log?: Logger, signal?: AbortSignal)
         let stderrText = '';
         const forward = (buf: Buffer) => {
             for (const line of buf.toString().replace(/\r/g, '\n').split('\n')) {
-                if (line.trim()) out(line.trimEnd());
+                if (line.trim() && shouldLog(line)) out(formatToolLine(line.trimEnd()));
             }
         };
         child.stdout?.on('data', forward);
@@ -172,8 +179,6 @@ function permanentReason(err: unknown): string | null {
     return null;
 }
 
-const RETRY_CAP_MS = 30_000;
-
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
         if (signal?.aborted) return reject(new StopError());
@@ -201,8 +206,7 @@ async function withRetry<T>(
             const reason = permanentReason(err);
             if (reason) throw new SkipTrack(reason);
             const waitMs = Math.min(1500 * attempt, RETRY_CAP_MS);
-            out('---------------------------------------------------------------------------------------------------');
-            out(`[RETRY] (╥﹏╥) attempt ${attempt} failed. Retrying in ${waitMs / 1000}s...`);
+            out(`[RETRY] attempt ${attempt} failed. Retrying in ${waitMs / 1000}s...`);
             await sleep(waitMs, signal);
         }
     }
@@ -213,6 +217,7 @@ async function writeMetadata(file: string, format: Format, meta: TrackMeta, log?
     const ffmpegBin = join(toolchainDir, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
     const tmp = file.replace(new RegExp(`\\.${format}$`), `.tagging.${format}`);
     await spawnP(ffmpegBin, [
+        '-hide_banner', '-loglevel', 'error',
         '-i', file,
         '-c', 'copy',
         '-metadata', `title=${meta.title}`,
@@ -242,17 +247,15 @@ export async function downloadTrack(
     const name = safeName(meta.title);
     const finalPath = join(dir, `${name}.${format}`);
 
-    out('---------------------------------------------------------------------------------------------------');
-
     if (existsSync(finalPath)) {
-        out(`[SKIPPING DUPLICATES] ᕙ( ᗒᗣᗕ )ᕗ ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
+        out(`[SKIPPING DUPLICATES] ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
         return finalPath;
     }
 
     mkdirSync(dir, { recursive: true });
 
     const query = `${meta.artists.join(' ')} ${meta.title}`;
-    out(`[DOWNLOADING] ♡⸜(˶˃ ᵕ ˂˶)⸝♡ ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
+    out(`[DOWNLOADING] ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
     try {
         await withRetry(
             () => spawnP(YTDLP_BIN, buildYtDlpArgs(query, join(dir, name).replace(/%/g, '%%') + '.%(ext)s'), log, signal),
@@ -262,7 +265,7 @@ export async function downloadTrack(
         );
     } catch (err) {
         if (err instanceof SkipTrack) {
-            out(`[SKIPPING ${err.reason}] (ノಠ益ಠ)ノ彡┻━┻ ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
+            out(`[SKIPPING ${err.reason}] ${meta.artists.join(', ')} - ${meta.album} - ${meta.title}`);
             return finalPath;
         }
         throw err;

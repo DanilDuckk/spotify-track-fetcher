@@ -1,5 +1,5 @@
 {
-  "name": "spotify-playlist-ts",
+  "name": "stream-2-player",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -12,8 +12,8 @@
     "dist": "npm run build:app && electron-builder"
   },
   "build": {
-    "appId": "com.spotifytrackfetcher.app",
-    "productName": "Spotify Track Fetcher",
+    "appId": "com.stream2player.app",
+    "productName": "Stream2Player",
     "files": [
       "dist-electron/**/*",
       "index.html",
@@ -27,13 +27,36 @@
       "node_modules/ffprobe-static/**",
       "node_modules/youtube-dl-exec/**"
     ],
-    "directories": { "buildResources": "build" },
+    "directories": {
+      "buildResources": "build"
+    },
     "extraResources": [
-      { "from": "node_modules/youtube-dl-exec/bin", "to": "bin", "filter": ["yt-dlp*"] }
+      {
+        "from": "node_modules/youtube-dl-exec/bin",
+        "to": "bin",
+        "filter": [
+          "yt-dlp*"
+        ]
+      }
     ],
-    "mac": { "target": ["dmg"], "category": "public.app-category.music", "icon": "public/icons/macos.icns" },
-    "win": { "target": ["nsis"], "icon": "public/icons/win.ico" },
-    "linux": { "target": ["AppImage"] }
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.music",
+      "icon": "public/icons/macos.icns"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/icons/win.ico"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    }
   },
   "dependencies": {
     "dotenv": "^16.4.7",
