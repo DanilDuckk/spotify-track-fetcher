@@ -4,6 +4,7 @@ import { createSpotify } from '@/src/api/spotify-fetcher';
 import { downloadTrack, YTDLP_BIN } from '@/src/api/youtube-fetcher';
 import { StopError } from '@/src/types/error';
 import { DownloadConfig } from '@/src/types/config';
+import { DEV_LOGS } from '@/src/constants';
 
 let controller: AbortController | null = null;
 
@@ -65,7 +66,7 @@ function createWindow(): void {
       );
 
       log('[INFO] Fetching playlist from Spotify...');
-      log(`[INFO] yt-dlp binary: ${YTDLP_BIN}`);
+      if (DEV_LOGS) log(`[INFO] yt-dlp binary: ${YTDLP_BIN}`);
       const { info, items } = await spotify.getPlaylistTracks();
       const tracks = items.filter((e) => e.item);
       log(`[INFO] Playlist "${info.name}" — ${tracks.length} tracks. Starting download...`);

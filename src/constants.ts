@@ -2,4 +2,4 @@
 export const RETRY_CAP_MS = 30_000;
 
 /** Set true to see full yt-dlp/ffmpeg output in the log. */
-export const VERBOSE_TOOL_LOGS = true;
+export const DEV_LOGS = false;

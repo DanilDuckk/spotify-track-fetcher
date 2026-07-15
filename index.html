@@ -8,7 +8,6 @@
   <title>STREAM2PLAYER</title>
   <style>
     :root {
-      /* Neutrals shifted warm so the yellow sits inside the palette, not on top of it. */
       --bg: #0c0b09;
       --surface: #1a1815;
       --surface-hover: #262320;
@@ -384,7 +383,7 @@
     const BGM_SRC = 'public/bgm.mp3';
 
     const bgm = new Audio(BGM_SRC);
-    bgm.loop = true;    // restarts by itself when it ends
+    bgm.loop = true;
     bgm.volume = 0.35;
 
     bgm.addEventListener('error', () => {

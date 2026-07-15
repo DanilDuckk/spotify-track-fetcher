@@ -10,7 +10,7 @@ export type Format = 'mp3';
 export type Logger = (line: string) => void;
 import { ProcessError, StopError, SkipTrack } from '@/src/types/error';
 import { isSpawnError } from '@/src/util/error'
-import { VERBOSE_TOOL_LOGS, RETRY_CAP_MS } from '@/src/constants';
+import { DEV_LOGS, RETRY_CAP_MS } from '@/src/constants';
 import { resolveToolCommand } from '@/src/api/yt-dlp-runtime';
 
 const YTDLP_NAMES: readonly string[] =
@@ -51,9 +51,6 @@ function resolveYtDlp(): string {
 export const YTDLP_BIN = resolveYtDlp();
 
 function resolveExecutablePath(candidate: string): string {
-    // Packaged app: binaries inside app.asar can neither be executed nor copied
-    // (spawn/copyFileSync throw ENOTDIR). Their real files live in app.asar.unpacked
-    // (requires asarUnpack in package.json).
     if (candidate.includes(`app.asar${sep}`)) {
         candidate = candidate.replace(`app.asar${sep}`, `app.asar.unpacked${sep}`);
     }
@@ -116,7 +113,7 @@ export function safeName(input: string): string {
 }
 
 function shouldLog(line: string): boolean {
-    if (VERBOSE_TOOL_LOGS) return true;
+    if (DEV_LOGS) return true;
     return /\b(ERROR|WARNING)\b/.test(line);
 }
 

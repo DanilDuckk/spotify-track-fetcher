@@ -1,4 +1,4 @@
-# What is SteamToPlayer?
+# What is Steam2Player?
 
 A desktop application that allows you to download music from Spotify playlists to your local machine. It uses the youtube-dl-exec library to download the music, and the ffmpeg-static library to convert the audio to mp3.
 
@@ -62,7 +62,7 @@ If you want to build it yourself:
 ```bash
 npm install
 npm run typecheck
-npm run build:app
+npm run app
 ```
 
 To create installers locally:
