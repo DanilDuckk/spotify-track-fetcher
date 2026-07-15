@@ -432,9 +432,9 @@
       playBgm();
       try {
         await window.api.startDownload({
-          playlistId: "67ttn9jNPuIvkVuyOgpmlB",// $('playlistId').value.trim(),
-          clientId: "08ff926e2bdd425a9a7b9575edcd8841",// $('clientId').value.trim(),
-          clientSecret: "416d618d6d894e6a9f45ba5d1f7fce7d",// $('clientSecret').value.trim(),
+          playlistId: $('playlistId').value.trim(),
+          clientId: $('clientId').value.trim(),
+          clientSecret: $('clientSecret').value.trim(),
           downloadDir: $('downloadDir').value.trim(),
         });
       } finally {
