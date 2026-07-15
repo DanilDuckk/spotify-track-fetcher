@@ -11,6 +11,7 @@ export type Logger = (line: string) => void;
 import { ProcessError, StopError, SkipTrack } from '@/src/types/error';
 import { isSpawnError } from '@/src/util/error'
 import { VERBOSE_TOOL_LOGS, RETRY_CAP_MS } from '@/src/constants';
+import { resolveToolCommand } from '@/src/api/yt-dlp-runtime';
 
 const YTDLP_NAMES: readonly string[] =
     process.platform === 'win32'
@@ -130,7 +131,8 @@ function spawnP(bin: string, args: string[], log?: Logger, signal?: AbortSignal)
     const out = log ?? ((s: string) => console.log(s));
 
     return new Promise((done, reject) => {
-        const child = spawn(bin, args, { shell: false, env: childEnv, signal });
+        const resolved = resolveToolCommand(bin, { env: childEnv });
+        const child = spawn(resolved.command, [...resolved.args, ...args], { shell: false, env: childEnv, signal });
         let stderrText = '';
         const forward = (buf: Buffer) => {
             for (const line of buf.toString().replace(/\r/g, '\n').split('\n')) {
