@@ -25,17 +25,21 @@ export function createSpotify(cfg: SpotifyConfig, log: Logger = console.log) {
       return data.refresh_token ?? null;
     } catch { return null; }
   }
+  
   function saveRefreshToken(token: string): void {
     writeFileSync(tokenFile, JSON.stringify({ refresh_token: token }, null, 2));
   }
 
   function getAuthCode(): Promise<string> {
     const state = crypto.randomBytes(16).toString('hex');
+    
     const params = new URLSearchParams({
       client_id: cfg.clientId, response_type: 'code', redirect_uri: redirectUri, scope: SCOPE, state,
     });
+    
     const authUrl = `${AUTH_URL}?${params.toString()}`;
     const port = Number(new URL(redirectUri).port) || 8888;
+    
     return new Promise<string>((resolve, reject) => {
       const server = http.createServer((req, res) => {
         const url = new URL(req.url ?? '', `http://127.0.0.1:${port}`);
@@ -49,6 +53,7 @@ export function createSpotify(cfg: SpotifyConfig, log: Logger = console.log) {
         else if (url.searchParams.get('state') !== state) reject(new Error('State mismatch — possible CSRF.'));
         else resolve(code as string);
       });
+      
       server.listen(port, '127.0.0.1', () => {
         log('Opening browser for authorization...');
         const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start ""' : 'xdg-open';
@@ -59,17 +64,21 @@ export function createSpotify(cfg: SpotifyConfig, log: Logger = console.log) {
 
   async function tokenRequest(body: URLSearchParams) {
     const basic = Buffer.from(`${cfg.clientId}:${cfg.clientSecret}`).toString('base64');
+    
     const resp = await fetch(TOKEN_URL, {
       method: 'POST',
       headers: { Authorization: `Basic ${basic}`, 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
     });
+    
     if (!resp.ok) throw new Error(`Token error ${resp.status}: ${await resp.text()}`);
+    
     return (await resp.json()) as { access_token: string; refresh_token?: string };
   }
 
   async function authorize(): Promise<string> {
     const cached = loadRefreshToken();
+    
     if (cached) {
       try {
         const data = await tokenRequest(new URLSearchParams({ grant_type: 'refresh_token', refresh_token: cached }));
@@ -78,9 +87,12 @@ export function createSpotify(cfg: SpotifyConfig, log: Logger = console.log) {
         return data.access_token;
       } catch { log('Cached token invalid, re-authorization required.'); }
     }
+    
     const code = await getAuthCode();
     const data = await tokenRequest(new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri }));
+    
     if (data.refresh_token) saveRefreshToken(data.refresh_token);
+    
     return data.access_token;
   }
 
@@ -88,12 +100,15 @@ export function createSpotify(cfg: SpotifyConfig, log: Logger = console.log) {
     const headers = { Authorization: `Bearer ${token}` };
     const metaFields = encodeURIComponent('name,owner(display_name),items(total)');
     const metaResp = await fetch(`${API_BASE}/playlists/${cfg.playlistId}?fields=${metaFields}`, { headers });
-    if (!metaResp.ok) throw new Error(`Playlist error ${metaResp.status}: ${await metaResp.text()}`);
-    const info = (await metaResp.json()) as PlaylistMeta;
 
+    if (!metaResp.ok) throw new Error(`Playlist error ${metaResp.status}: ${await metaResp.text()}`);
+   
+    const info = (await metaResp.json()) as PlaylistMeta;
     const items: PlaylistEntry[] = [];
     const itemFields = encodeURIComponent('items(item(name,artists(name),album(name,release_date,images),external_urls(spotify))),next');
+    
     let url: string | null = `${API_BASE}/playlists/${cfg.playlistId}/items?limit=100&fields=${itemFields}`;
+    
     while (url) {
       const resp: Response = await fetch(url, { headers });
       if (!resp.ok) throw new Error(`Items error ${resp.status}: ${await resp.text()}`);
@@ -101,6 +116,7 @@ export function createSpotify(cfg: SpotifyConfig, log: Logger = console.log) {
       items.push(...page.items);
       url = page.next;
     }
+   
     return { info, items };
   }
 

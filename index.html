@@ -4,23 +4,25 @@
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
-  <title>StreamToPlayer</title>
+    content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; media-src 'self'" />
+  <title>STREAM2PLAYER</title>
   <style>
     :root {
-      --bg: #111111;
-      --surface: #1c1c1c;
-      --surface-hover: #292929;
-      --border: #3a3a3a;
+      --bg: #0c0b09;
+      --surface: #1a1815;
+      --surface-hover: #262320;
+      --border: #3a352c;
 
       --text: #ffffff;
-      --muted: #bdbdbd;
+      --muted: #b8b0a0;
 
       --primary: #ffd600;
       --primary-hover: #ffe44d;
 
-      --secondary: #333333;
+      --secondary: #2e2a24;
       --accent: #ffb300;
+
+      --glow: rgba(255, 214, 0, 0.35);
     }
 
     @font-face {
@@ -28,20 +30,108 @@
       src: url('public/font/FOT-SkipStd-B.otf') format('opentype');
     }
 
+    html {
+      background: var(--bg);
+    }
+
+    html::before {
+      content: '';
+      position: fixed;
+      inset: -50%;
+      z-index: -3;
+      pointer-events: none;
+      background:
+        radial-gradient(closest-side at 22% 26%, rgba(255, 214, 0, 0.13), transparent),
+        radial-gradient(closest-side at 78% 66%, rgba(255, 110, 0, 0.10), transparent),
+        radial-gradient(closest-side at 50% 98%, rgba(255, 179, 0, 0.07), transparent);
+      animation: drift 34s ease-in-out infinite alternate;
+    }
+
+    @keyframes drift {
+      from {
+        transform: translate3d(-2%, 1%, 0) scale(1) rotate(0deg);
+      }
+
+      to {
+        transform: translate3d(3%, -2%, 0) scale(1.14) rotate(7deg);
+      }
+    }
+
+    html::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      pointer-events: none;
+      background:
+        repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.28) 0 1px, transparent 1px 3px),
+        radial-gradient(130% 95% at 50% 0%, transparent 52%, rgba(0, 0, 0, 0.6));
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: -32vh;
+      height: 30vh;
+      z-index: -1;
+      pointer-events: none;
+      background: linear-gradient(180deg,
+          transparent,
+          rgba(255, 214, 0, 0.04) 46%,
+          rgba(255, 255, 255, 0.028) 50%,
+          rgba(255, 214, 0, 0.04) 54%,
+          transparent);
+      animation: roll 13s linear infinite;
+    }
+
+    @keyframes roll {
+      from {
+        transform: translateY(0);
+      }
+
+      to {
+        transform: translateY(165vh);
+      }
+    }
+
     body {
       font-family: 'Persona', system-ui, sans-serif;
       margin: 0;
       padding: 24px;
-      background: var(--bg);
       color: var(--text);
     }
 
-    h1 {
+    ::selection {
+      background: var(--primary);
+      color: #111111;
+    }
 
-      font-size: 20px;
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       margin: 0 0 16px;
+    }
+
+    h1 {
+      font-size: 20px;
+      margin: 0;
       color: var(--primary);
       letter-spacing: 1px;
+      text-shadow: 0 0 24px var(--glow);
+    }
+
+    /* Fixed width so swapping the icon never shifts the header. */
+    #mute {
+      min-width: 46px;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    #mute.off {
+      color: var(--muted);
     }
 
     label {
@@ -50,6 +140,7 @@
       margin: 12px 0 4px;
       color: var(--muted);
       font-weight: 600;
+      letter-spacing: 1.5px;
     }
 
     input {
@@ -61,10 +152,25 @@
       background: var(--surface);
       color: var(--text);
       outline: none;
+      transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+    }
+
+    input:hover {
+      border-color: #4d463a;
     }
 
     input:focus {
       border-color: var(--primary);
+      background: var(--surface-hover);
+      box-shadow: 0 0 0 2px rgba(255, 214, 0, 0.16), 0 0 18px rgba(255, 214, 0, 0.10);
+    }
+
+    input::placeholder {
+      color: #6f675a;
+    }
+
+    input:read-only {
+      color: var(--muted);
     }
 
     .row {
@@ -79,8 +185,23 @@
       flex: 1;
     }
 
+    .section {
+      width: 400px;
+    }
+
+    .container {
+      display: flex;
+      gap: 24px;
+    }
+
     button {
       font-family: 'Persona', sans-serif;
+      transition: background .18s ease, border-color .18s ease, box-shadow .18s ease, color .18s ease;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
     }
 
     button.secondary {
@@ -97,22 +218,25 @@
     button.secondary:hover {
       background: var(--surface-hover);
       border-color: var(--primary);
+      color: var(--primary);
     }
 
     button.primary {
       padding: 2px 14px;
       border: 0;
       border-radius: 4px;
-      background: var(--primary);
+      background: linear-gradient(180deg, var(--primary-hover), var(--accent));
       color: #111111;
       font-weight: 800;
       cursor: pointer;
       text-transform: uppercase;
       letter-spacing: 1px;
+      box-shadow: 0 0 14px rgba(255, 214, 0, 0.22);
     }
 
     button.primary:hover {
-      background: var(--primary-hover);
+      background: linear-gradient(180deg, #fff17a, var(--primary));
+      box-shadow: 0 0 26px rgba(255, 214, 0, 0.45);
     }
 
     button:disabled {
@@ -120,15 +244,48 @@
       cursor: default;
     }
 
+    button.primary:disabled,
+    button.secondary:disabled:hover {
+      box-shadow: none;
+      background: var(--secondary);
+      color: var(--text);
+      border-color: var(--border);
+    }
+
+    button.primary:disabled {
+      background: var(--secondary);
+    }
+
     progress {
       width: 100%;
       height: 14px;
-      margin-top: 16px;
+      margin-top: 20px;
       accent-color: var(--primary);
+      appearance: none;
+      -webkit-appearance: none;
+    }
+
+    progress::-webkit-progress-bar {
+      background: var(--surface);
+      border-radius: 4px;
+      box-shadow: inset 0 0 0 1px var(--border);
+    }
+
+    progress::-webkit-progress-value {
+      border-radius: 4px;
+      background-image: linear-gradient(90deg, var(--accent), var(--primary-hover), var(--accent));
+      background-size: 200% 100%;
+      box-shadow: 0 0 12px rgba(255, 214, 0, 0.5);
+      animation: shimmer 2.4s linear infinite;
+    }
+
+    @keyframes shimmer {
+      to {
+        background-position: -200% 0;
+      }
     }
 
     #log {
-      margin-top: 16px;
       height: 200px;
       overflow: auto;
       background: #050505;
@@ -139,37 +296,78 @@
       font-family: monospace;
       font-size: 12px;
       white-space: pre-wrap;
-      color: #eeeeee;
+      color: #e8e4dc;
+      box-shadow: inset 0 0 40px rgba(255, 179, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.6);
+    }
+
+    #log::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    #log::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    #log::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
+
+    #log::-webkit-scrollbar-thumb:hover {
+      background: var(--accent);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      html::before,
+      progress::-webkit-progress-value {
+        animation: none;
+      }
+
+      body::before {
+        display: none;
+      }
+
+      * {
+        transition-duration: 0.01ms !important;
+      }
     }
   </style>
 </head>
 
 <body>
-  <h1>SteamToPlayer (˶ᵔ ᵕ ᵔ˶)</h1>
+  <header class="header">
+    <h1>STREAM2PLAYER ♫</h1>
+    <button id="mute" class="secondary" title="Mute music">||</button>
+  </header>
+  <div class="container">
+    <section class="section">
+      <label>PLAYLIST_ID</label>
+      <input id="playlistId" placeholder="e.g. 3pdwsDnzLp6Uks4dUutxp8" />
 
-  <label>PLAYLIST_ID</label>
-  <input id="playlistId" placeholder="e.g. 3pdwsDnzLp6Uks4dUutxp8" />
+      <label>CLIENT_ID</label>
+      <input id="clientId" />
 
-  <label>CLIENT_ID</label>
-  <input id="clientId" />
+      <label>CLIENT_SECRET</label>
+      <input id="clientSecret" type="password" />
 
-  <label>CLIENT_SECRET</label>
-  <input id="clientSecret" type="password" />
+      <label>DOWNLOAD FOLDER</label>
+      <div class="row">
+        <input id="downloadDir" placeholder="No folder selected" readonly />
+        <button id="choose" class="secondary">Choose</button>
+      </div>
 
-  <label>Download folder</label>
-  <div class="row">
-    <input id="downloadDir" placeholder="No folder selected" readonly />
-    <button id="choose" class="secondary">Choose</button>
+      <div class="row">
+        <button id="start" class="primary">Start</button>
+        <button id="stop" class="secondary" disabled>Stop</button>
+      </div>
+    </section>
+    <section class="section">
+      <label>LOGS</label>
+      <div id="log"></div>
+      <progress id="bar" value="0" max="100"></progress>
+    </section>
   </div>
-
-  <div class="row">
-    <button id="start" class="primary">Start</button>
-    <button id="stop" class="secondary" disabled>Stop</button>
-  </div>
-
-  <progress id="bar" value="0" max="100"></progress>
-  <div id="log"></div>
-
   <script>
     const $ = (id) => document.getElementById(id);
     const logEl = $('log');
@@ -178,6 +376,36 @@
       logEl.textContent += line + '\n';
       logEl.scrollTop = logEl.scrollHeight;
     }
+
+    // --- Background music -------------------------------------------------
+    // Put your track here. public/** is already in build.files, so it ships
+    // with the packaged app automatically.
+    const BGM_SRC = 'public/bgm.mp3';
+
+    const bgm = new Audio(BGM_SRC);
+    bgm.loop = true;
+    bgm.volume = 0.35;
+
+    bgm.addEventListener('error', () => {
+      addLog(`[WARNING] Music not loaded: ${BGM_SRC}`);
+    });
+
+    function playBgm() {
+      bgm.currentTime = 0;
+      // Called from a click handler, so the autoplay policy allows it.
+      bgm.play().catch((e) => addLog(`[WARNING] Music: ${e.message}`));
+    }
+
+    function stopBgm() {
+      bgm.pause();
+    }
+
+    $('mute').onclick = () => {
+      bgm.muted = !bgm.muted;
+      $('mute').textContent = bgm.muted ? '▷' : '||';
+      $('mute').classList.toggle('off', bgm.muted);
+      $('mute').title = bgm.muted ? 'Unmute music' : 'Mute music';
+    };
 
     window.api.onLog(addLog);
     window.api.onProgress((p) => {
@@ -191,6 +419,7 @@
 
     $('stop').onclick = () => {
       $('stop').disabled = true;
+      stopBgm();
       window.api.stop();
     };
 
@@ -199,6 +428,7 @@
       $('stop').disabled = false;
       $('bar').value = 0;
       logEl.textContent = '';
+      playBgm();
       try {
         await window.api.startDownload({
           playlistId: $('playlistId').value.trim(),
@@ -207,6 +437,7 @@
           downloadDir: $('downloadDir').value.trim(),
         });
       } finally {
+        stopBgm();
         $('start').disabled = false;
         $('stop').disabled = true;
       }
