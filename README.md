@@ -51,7 +51,6 @@ Playlist ID: `37i9dQZF1DXcBWIGoYBM5M`
 2. Paste the Playlist ID
 3. Paste your Spotify Client ID
 4. Paste your Spotify Client Secret
-5. Paste the Playlist ID
 6. Choose a folder for the downloaded music
 7. Click Start
 
